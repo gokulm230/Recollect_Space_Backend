@@ -17,19 +17,14 @@ const app = express();
 app.use("/models", express.static(path.join(__dirname, "models2")));
 app.use(cors());
 app.use(express.json());
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "ok" });
+});
 app.use("/api/auth", authRoutes);
 app.use("/api/folders", folderRoutes);
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use("/api", blogRoutes);
 app.use("/api/photos", Photo);
-
-app.use(
-  cors({
-    origin: "http://localhost:3000",
-    methods: ["GET", "POST"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  }),
-);
 
 const initServer = async () => {
   try {
