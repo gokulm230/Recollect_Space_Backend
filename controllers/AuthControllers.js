@@ -30,7 +30,9 @@ const registerUser = async (req, res) => {
     });
 
     const token = generateToken(user._id);
-    res.status(201).json({ user, token });
+    const safeUser = user.toObject();
+    delete safeUser.password;
+    res.status(201).json({ user: safeUser, token });
   } catch (err) {
     res.status(500).json({ message: "Server Error", error: err.message });
   }
@@ -107,68 +109,40 @@ const verifyOTP = async (req, res) => {
 };
 
 const loginUser = async (req, res) => {
-  console.log("\n=== Login Attempt Debug Log ===");
   const { email, password } = req.body;
 
-  // Input validation logs
-  console.log("Login attempt details:");
-  console.log("- Email:", email);
-  console.log("- Password received:", !!password);
-  console.log("- Password length:", password?.length);
-  console.log("- Password type:", typeof password);
-  console.log("- Raw password bytes:", Buffer.from(password).toString("hex"));
-
   if (!email || !password) {
-    console.log("ERROR: Missing credentials");
     return res.status(400).json({ message: "Email or password missing" });
   }
 
   try {
-    // Database query logs
-    console.log("\nDatabase lookup:");
     const user = await User.findOne({ email });
-    console.log("- User found:", !!user);
 
     if (!user) {
-      console.log("ERROR: No user found with email:", email);
       return res.status(400).json({ message: "Invalid credentials" });
     }
 
-    // Password verification logs
-    console.log("\nPassword verification:");
-    console.log("- Stored hash:", user.password);
-
-    // First try with original password
-    console.log("\nAttempting password verification:");
     const isValid = await passwordUtils.verifyPassword(password, user.password);
-    console.log("- Password match result:", isValid);
 
-    // If failed, try with trimmed password
     if (!isValid) {
-      console.log("\nAttempting with trimmed password:");
       const trimmedValid = await passwordUtils.verifyPassword(
         password.trim(),
         user.password,
       );
-      console.log("- Trimmed password match:", trimmedValid);
 
       if (!trimmedValid) {
-        // Debug hash generation
-        console.log("\nDebug hash generation:");
-        const debugHash = await passwordUtils.hashPassword(password);
-        console.log("- Generated hash:", debugHash);
-        console.log("- Stored hash:  ", user.password);
-        console.log("ERROR: Password verification failed");
         return res.status(400).json({ message: "Invalid credentials" });
       }
     }
 
-    // Success logs
-    console.log("\nLogin successful:");
-    console.log("- Generating token for user ID:", user._id);
     const token = generateToken(user._id);
-
-    res.json({ user, token });
+    const safeUser = user.toObject();
+    delete safeUser.password;
+    delete safeUser.otp;
+    delete safeUser.otpExpiry;
+    delete safeUser.resetToken;
+    delete safeUser.resetTokenExpiry;
+    res.json({ user: safeUser, token });
   } catch (error) {
     console.error("\nError in login process:", error);
     console.error("Stack trace:", error.stack);

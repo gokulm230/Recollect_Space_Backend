@@ -1,0 +1,82 @@
+name: Build and Deploy Backend
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT_ID: project-ba5e8e78-81ed-459a-856
+  REGION: northamerica-northeast1
+  GAR_REPOSITORY: recollect-backend
+  IMAGE_NAME: recollect-backend
+  GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
+  GKE_LOCATION: ${{ vars.GKE_LOCATION }}
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+
+      - name: Build and push image
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          IMAGE_URI="${REGION}-docker.pkg.dev/${PROJECT_ID}/${GAR_REPOSITORY}/${IMAGE_NAME}:${IMAGE_TAG}"
+          docker build --tag "${IMAGE_URI}" .
+          docker push "${IMAGE_URI}"
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ env.GKE_CLUSTER }}
+          location: ${{ env.GKE_LOCATION }}
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Create or update Kubernetes Secret
+        env:
+          MONGO_URI: ${{ secrets.MONGO_URI }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+          ENCRYPTION_MASTER_KEY: ${{ secrets.ENCRYPTION_MASTER_KEY }}
+          CLIENT_ENCRYPTION_KEY: ${{ secrets.CLIENT_ENCRYPTION_KEY }}
+        run: |
+          kubectl create secret generic recollect-backend-secrets \
+            --from-literal=MONGO_URI="$MONGO_URI" \
+            --from-literal=PORT="5000" \
+            --from-literal=JWT_SECRET="$JWT_SECRET" \
+            --from-literal=EMAIL_USER="$EMAIL_USER" \
+            --from-literal=EMAIL_PASS="$EMAIL_PASS" \
+            --from-literal=ENCRYPTION_MASTER_KEY="$ENCRYPTION_MASTER_KEY" \
+            --from-literal=DEBUG_SAVE_FAILED_DECRYPTION="false" \
+            --from-literal=CLIENT_ENCRYPTION_KEY="$CLIENT_ENCRYPTION_KEY" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy to GKE
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          sed "s/IMAGE_TAG/${IMAGE_TAG}/" k8s/deployment.yaml | kubectl apply -f -
+          kubectl apply -f k8s/service.yaml
+          kubectl rollout status deployment/recollect-backend --timeout=10m

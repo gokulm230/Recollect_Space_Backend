@@ -22,7 +22,8 @@ spec:
       containers:
         - name: recollect-backend
 
-          image: northamerica-northeast1-docker.pkg.dev/project-ba5e8e78-81ed-459a-856/recollect-backend/recollect-backend:latest
+          image: northamerica-northeast1-docker.pkg.dev/project-ba5e8e78-81ed-459a-856/recollect-backend/recollect-backend:IMAGE_TAG
+          imagePullPolicy: IfNotPresent
 
           ports:
             - name: http
@@ -41,21 +42,24 @@ spec:
               memory: "1Gi"
 
           startupProbe:
-            tcpSocket:
+            httpGet:
+              path: /health
               port: http
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 30
 
           readinessProbe:
-            tcpSocket:
+            httpGet:
+              path: /health
               port: http
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
 
           livenessProbe:
-            tcpSocket:
+            httpGet:
+              path: /health
               port: http
             initialDelaySeconds: 30
             periodSeconds: 20

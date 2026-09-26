@@ -10,7 +10,6 @@ const Photo = require("./routes/Photo");
 const { loadModels } = require("./controllers/PhotoController");
 
 dotenv.config();
-connectDB();
 const PORT = process.env.PORT || 5000;
 
 const app = express();
@@ -28,6 +27,7 @@ app.use("/api/photos", Photo);
 
 const initServer = async () => {
   try {
+    await connectDB();
     console.log("Loading face-api models...");
     await loadModels();
     console.log("All models loaded successfully");
